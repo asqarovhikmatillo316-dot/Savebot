@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 from aiohttp import web
-from telegram import Update
+from telegram import Update, BotCommand
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -31,13 +31,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# --- VIDEO YUKLASH FUNKSIYASI ---
+# --- VIDEO YUKLASH FUNKSIYASI (YOUTUBE VA INSTAGRAM UCHUN OPTIMALLASHTIRILGAN) ---
 def download_video(url, output_path):
     ydl_opts = {
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'outtmpl': output_path,
         'quiet': True,
         'no_warnings': True,
+        'nocheckcertificate': True,
+        'geo_bypass': True,
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
@@ -110,6 +113,13 @@ async def main_async():
 
     async with application:
         await application.initialize()
+        
+        # Menyu tugmalarini (Commands) o'rnatish
+        commands = [
+            BotCommand("start", "Botni ishga tushirish 🔄")
+        ]
+        await application.bot.set_my_commands(commands)
+
         await application.start()
         await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
         await asyncio.Event().wait()
