@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from aiohttp import web
 from telegram import Update
 from telegram.ext import (
@@ -9,6 +10,7 @@ from telegram.ext import (
     MessageHandler,
     filters
 )
+import yt_dlp
 
 # --- LOGGING SOZLAMALARI ---
 logging.basicConfig(
@@ -20,19 +22,53 @@ logger = logging.getLogger(__name__)
 # --- SOZLAMALAR ---
 TOKEN = "8891447881:AAElGLH4neb3Dk9sH9e7I2ji3QUBNEA6_e8"
 
-# --- BOT COMMAND & MESSAGE HANDLERS ---
+# --- BOT COMMAND HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Xush kelibsiz! Menga Instagram yoki YouTube video havolasini yuboring, men uni yuklab beraman."
     )
 
+# --- VIDEO YUKLASH FUNKSIYASI (FONDA ISHLAYDI) ---
+def download_video(url, output_path):
+    ydl_opts = {
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        'outtmpl': output_path,
+        'quiet': True,
+        'no_warnings': True,
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_text = update.message.text
+    url = update.message.text.strip()
+    
+    if not (url.startswith("http://") or url.startswith("https://")):
+        await update.message.reply_text("Iltimos, to'g'ri video havolasini (link) yuboring.")
+        return
 
-    # Bu yerda video yuklab beruvchi kodingiz (yt-dlp) ishlaydi
-    await update.message.reply_text("Video yuklanmoqda, iltimos kuting...")
+    status_msg = await update.message.reply_text("⚡ Video yuklanmoqda, kuting...")
+    
+    file_path = f"video_{update.effective_user.id}_{update.message.message_id}.mp4"
 
-# --- ERROR HANDLER (XATOLIKLARNI USHLASH) ---
+    try:
+        # Video yuklashni asosiy oqimni to'sib qo'ymaydigan alohida thread'ga o'tkazamiz
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, download_video, url, file_path)
+
+        if os.path.exists(file_path):
+            await update.message.reply_video(video=open(file_path, 'rb'))
+            await status_msg.delete()
+            os.remove(file_path)
+        else:
+            await status_msg.edit_text("Videoni yuklab bo'lmadi.")
+
+    except Exception as e:
+        logger.error(f"Yuklashda xatolik: {e}")
+        await status_msg.edit_text("❌ Videoni yuklashda xatolik yuz berdi. Havolani tekshirib qayta urinib ko'ring.")
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+# --- ERROR HANDLER ---
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     logger.error("Botda kutilmagan xatolik yuz berdi:", exc_info=context.error)
 
@@ -53,23 +89,18 @@ async def main_async():
     application = (
         Application.builder()
         .token(TOKEN)
-        .read_timeout(30)
-        .write_timeout(30)
-        .connect_timeout(30)
+        .read_timeout(60)
+        .write_timeout(60)
+        .connect_timeout(60)
         .build()
     )
 
-    # Handlerlar
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    # Error handler
     application.add_error_handler(error_handler)
 
-    # Render Web serverni ishga tushirish
     asyncio.create_task(start_web_server())
 
-    # Botni ishga tushirish
     async with application:
         await application.initialize()
         await application.start()
