@@ -21,7 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- SOZLAMALAR ---
-TOKEN = "8891447881:AAFvVg4_Ru_-owyuFuMeXKbLmo1-1yVryYg"
+TOKEN = "8891447881:AAHl-rmeiem-VevnAtVO0MoMQky9yZfufVw"
 BOT_USERNAME = "@Tillosave_bot"
 ADMIN_ID = 5621433060  # Sizning Telegram ID'ingiz (@Asqarov_Hikmatillo)
 
