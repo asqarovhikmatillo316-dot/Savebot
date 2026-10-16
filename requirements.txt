@@ -1,1 +1,5 @@
+
+python-telegram-bot
+yt-dlp
+httpx
 aiohttp
