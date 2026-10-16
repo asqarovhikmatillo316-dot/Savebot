@@ -31,16 +31,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# --- VIDEO YUKLASH FUNKSIYASI (YOUTUBE VA INSTAGRAM UCHUN OPTIMALLASHTIRILGAN) ---
+# --- VIDEO YUKLASH FUNKSIYASI (YOUTUBE BLOKIROVKALARINI AYLANIPI O'TISh UCHUN) ---
 def download_video(url, output_path):
     ydl_opts = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        # Formatni soddalashtiramiz (tayyor mp4 yoki eng maqbul sifat)
+        'format': 'b[ext=mp4]/best[ext=mp4]/best',
         'outtmpl': output_path,
         'quiet': True,
         'no_warnings': True,
         'nocheckcertificate': True,
         'geo_bypass': True,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        # YouTube IP blokirovkasini Android/iOS klienti sifatida aylanib o'tamiz:
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'ios', 'web']
+            }
+        },
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
@@ -114,7 +121,7 @@ async def main_async():
     async with application:
         await application.initialize()
         
-        # Menyu tugmalarini (Commands) o'rnatish
+        # Menyu tugmalarini o'rnatish
         commands = [
             BotCommand("start", "Botni ishga tushirish 🔄")
         ]
