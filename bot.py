@@ -2,12 +2,13 @@ import asyncio
 import logging
 import os
 from aiohttp import web
-from telegram import Update, BotCommand
+from telegram import Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
     ContextTypes,
     MessageHandler,
+    CallbackQueryHandler,
     filters
 )
 import yt_dlp
@@ -22,36 +23,81 @@ logger = logging.getLogger(__name__)
 # --- SOZLAMALAR ---
 TOKEN = "8891447881:AAFvVg4_Ru_-owyuFuMeXKbLmo1-1yVryYg"
 BOT_USERNAME = "@Tillosave_bot"
+ADMIN_ID = 5621433060  # Sizning Telegram ID'ingiz (@Asqarov_Hikmatillo)
 
 # --- BOT COMMAND HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    
+    # 1. Foydalanuvchiga javob qaytarish
     await update.message.reply_text(
         "👋 **Xush kelibsiz!**\n\n"
-        "Menga **Instagram** 📸 yoki **YouTube** 🔴 video havolasini (link) yuboring, men uni sizga tezkor va sifatli yuklab beraman! ⚡️🎬",
+        "Menga **Instagram** 📸 yoki **YouTube** 🔴 video havolasini (link) yuboring. Men uni sizga **Video (MP4)** yoki **Audio (MP3)** ko'rinishida yuklab beraman! ⚡️🎬🎵",
         parse_mode="Markdown"
     )
+    
+    # 2. Sizga (Admin'ga) bildirishnoma yuborish
+    try:
+        admin_text = (
+            "🚀 **Yangi foydalanuvchi start bosdi!**\n\n"
+            f"👤 **Ismi:** {user.full_name}\n"
+            f"🆔 **ID:** `{user.id}`\n"
+            f"🔗 **Username:** @{user.username if user.username else 'yoq'}"
+        )
+        await context.bot.send_message(chat_id=ADMIN_ID, text=admin_text, parse_mode="Markdown")
+    except Exception as e:
+        logger.error(f"Adminga bildirishnoma yuborishda xatolik: {e}")
 
-# --- VIDEO YUKLASH FUNKSIYASI (YOUTUBE BLOKIROVKALARINI AYLANIPI O'TISh UCHUN) ---
-def download_video(url, output_path):
-    ydl_opts = {
-        # Formatni soddalashtiramiz (tayyor mp4 yoki eng maqbul sifat)
-        'format': 'b[ext=mp4]/best[ext=mp4]/best',
-        'outtmpl': output_path,
-        'quiet': True,
-        'no_warnings': True,
-        'nocheckcertificate': True,
-        'geo_bypass': True,
-        # YouTube IP blokirovkasini Android/iOS klienti sifatida aylanib o'tamiz:
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'ios', 'web']
+# --- YUKLASH FUNKSIYASI (MP3 VA MP4 UCHUN) ---
+def download_media(url, output_path, is_audio=False):
+    if is_audio:
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': output_path,
+            'quiet': True,
+            'no_warnings': True,
+            'nocheckcertificate': True,
+            'geo_bypass': True,
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['ios', 'android', 'web_creator'],
+                    'player_skip': ['webpage', 'configs']
+                }
+            },
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+                'Accept-Language': 'en-US,en;q=0.9',
             }
-        },
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    }
+        }
+    else:
+        ydl_opts = {
+            'format': 'best[ext=mp4]/best',
+            'outtmpl': output_path,
+            'quiet': True,
+            'no_warnings': True,
+            'nocheckcertificate': True,
+            'geo_bypass': True,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['ios', 'android', 'web_creator'],
+                    'player_skip': ['webpage', 'configs']
+                }
+            },
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+                'Accept-Language': 'en-US,en;q=0.9',
+            }
+        }
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
 
+# --- HAVOLA KELGANDA FORMAT TANLASH MENYUSI ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = update.message.text.strip()
     
@@ -59,29 +105,69 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Iltimos, to'g'ri video havolasini (link) yuboring. 🔗")
         return
 
-    status_msg = await update.message.reply_text("⚡️ Video yuklanmoqda, kuting...")
+    # Foydalanuvchidan formatni so'rash tugmalari
+    keyboard = [
+        [
+            InlineKeyboardButton("🎬 Video (MP4)", callback_data="fmt_mp4"),
+            InlineKeyboardButton("🎵 Audio (MP3)", callback_data="fmt_mp3")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
-    file_path = f"video_{update.effective_user.id}_{update.message.message_id}.mp4"
+    await update.message.reply_text(
+        "Qaysi formatda yuklashni xohlaysiz?",
+        reply_markup=reply_markup,
+        quote=True
+    )
+
+# --- TUGMA BOSILGANDA YUKLASH NATIVE HANDLER ---
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    url = query.message.reply_to_message.text.strip()
+    choice = query.data
+
+    if choice == "fmt_mp3":
+        is_audio = True
+        status_text = "⚡️ Audio (MP3) yuklanmoqda, kuting..."
+        file_ext = "mp3"
+    else:
+        is_audio = False
+        status_text = "⚡️ Video (MP4) yuklanmoqda, kuting..."
+        file_ext = "mp4"
+
+    await query.edit_message_text(status_text)
+    
+    file_path = f"media_{query.from_user.id}_{query.message.message_id}.{file_ext}"
 
     try:
-        # Asosiy oqimni ushlab qolmaslik uchun alohida thread'da yuklaymiz
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, download_video, url, file_path)
+        await loop.run_in_executor(None, download_media, url, file_path, is_audio)
+
+        # yt-dlp mp3 qilganda nomiga o'zi `.mp3` qo'shadi
+        if not os.path.exists(file_path) and os.path.exists(f"{file_path}.mp3"):
+            file_path = f"{file_path}.mp3"
 
         if os.path.exists(file_path):
-            # Video ostiga bot havolasini (caption) qo'shib yuboramiz
-            await update.message.reply_video(
-                video=open(file_path, 'rb'),
-                caption=f"🤖 {BOT_USERNAME}"
-            )
-            await status_msg.delete()
+            if is_audio:
+                await query.message.reply_audio(
+                    audio=open(file_path, 'rb'),
+                    caption=f"🤖 {BOT_USERNAME}"
+                )
+            else:
+                await query.message.reply_video(
+                    video=open(file_path, 'rb'),
+                    caption=f"🤖 {BOT_USERNAME}"
+                )
+            await query.delete_message()
             os.remove(file_path)
         else:
-            await status_msg.edit_text("Videoni yuklab bo'lmadi. ❌")
+            await query.edit_message_text("Faylni yuklab bo'lmadi. ❌")
 
     except Exception as e:
         logger.error(f"Yuklashda xatolik: {e}")
-        await status_msg.edit_text("❌ Videoni yuklashda xatolik yuz berdi. Havolani tekshirib qayta urinib ko'ring.")
+        await query.edit_message_text("❌ Faylni yuklashda xatolik yuz berdi. Havolani tekshirib qayta urinib ko'ring.")
         if os.path.exists(file_path):
             os.remove(file_path)
 
@@ -89,7 +175,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     logger.error("Botda kutilmagan xatolik yuz berdi:", exc_info=context.error)
 
-# --- RENDER WEB SERVER (24/7 ISHLASHI UCHUN) ---
+# --- RENDER WEB SERVER ---
 async def handle_ping(request):
     return web.Response(text="Bot is running and awake!")
 
@@ -114,6 +200,7 @@ async def main_async():
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(CallbackQueryHandler(button_callback))
     application.add_error_handler(error_handler)
 
     asyncio.create_task(start_web_server())
@@ -121,7 +208,6 @@ async def main_async():
     async with application:
         await application.initialize()
         
-        # Menyu tugmalarini o'rnatish
         commands = [
             BotCommand("start", "Botni ishga tushirish 🔄")
         ]
