@@ -20,8 +20,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- SOZLAMALAR ---
-TOKEN = "8891447881:AAElGLH4neb3Dk9sH9e7I2ji3QUBNEA6_e8"
-BOT_USERNAME = "@Save_bot"  # O'zingizning botingiz username'ini yozing
+TOKEN = "8891447881:AAFvVg4_Ru_-owyuFuMeXKbLmo1-1yVryYg"
+BOT_USERNAME = "@Tillosave_bot"
 
 # --- BOT COMMAND HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
