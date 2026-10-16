@@ -48,51 +48,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Adminga bildirishnoma yuborishda xatolik: {e}")
 
-# --- YUKLASH FUNKSIYASI (MP3 VA MP4 UCHUN) ---
+# --- YUKLASH FUNKSIYASI ---
 def download_media(url, output_path, is_audio=False):
-    if is_audio:
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': output_path,
-            'quiet': True,
-            'no_warnings': True,
-            'nocheckcertificate': True,
-            'geo_bypass': True,
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['ios', 'android', 'web_creator'],
-                    'player_skip': ['webpage', 'configs']
-                }
-            },
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
-                'Accept-Language': 'en-US,en;q=0.9',
+    ydl_opts = {
+        'format': 'bestaudio/best' if is_audio else 'best[ext=mp4]/best',
+        'outtmpl': output_path,
+        'quiet': True,
+        'no_warnings': True,
+        'nocheckcertificate': True,
+        'geo_bypass': True,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['ios', 'android', 'web_creator'],
+                'player_skip': ['webpage', 'configs']
             }
+        },
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+            'Accept-Language': 'en-US,en;q=0.9',
         }
-    else:
-        ydl_opts = {
-            'format': 'best[ext=mp4]/best',
-            'outtmpl': output_path,
-            'quiet': True,
-            'no_warnings': True,
-            'nocheckcertificate': True,
-            'geo_bypass': True,
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['ios', 'android', 'web_creator'],
-                    'player_skip': ['webpage', 'configs']
-                }
-            },
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
-                'Accept-Language': 'en-US,en;q=0.9',
-            }
-        }
+    }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
@@ -105,7 +80,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Iltimos, to'g'ri video havolasini (link) yuboring. 🔗")
         return
 
-    # Foydalanuvchidan formatni so'rash tugmalari
+    # Formatni so'rash tugmalari
     keyboard = [
         [
             InlineKeyboardButton("🎬 Video (MP4)", callback_data="fmt_mp4"),
@@ -120,7 +95,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         quote=True
     )
 
-# --- TUGMA BOSILGANDA YUKLASH NATIVE HANDLER ---
+# --- TUGMA BOSILGANDA YUKLASH HANDLERI ---
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -130,24 +105,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if choice == "fmt_mp3":
         is_audio = True
-        status_text = "⚡️ Audio (MP3) yuklanmoqda, kuting..."
+        status_text = "⚡️ Audio yuklanmoqda, kuting..."
         file_ext = "mp3"
     else:
         is_audio = False
-        status_text = "⚡️ Video (MP4) yuklanmoqda, kuting..."
+        status_text = "⚡️ Video yuklanmoqda, kuting..."
         file_ext = "mp4"
 
-    await query.edit_message_text(status_text)
+    status_msg = await query.edit_message_text(status_text)
     
     file_path = f"media_{query.from_user.id}_{query.message.message_id}.{file_ext}"
 
     try:
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, download_media, url, file_path, is_audio)
-
-        # yt-dlp mp3 qilganda nomiga o'zi `.mp3` qo'shadi
-        if not os.path.exists(file_path) and os.path.exists(f"{file_path}.mp3"):
-            file_path = f"{file_path}.mp3"
 
         if os.path.exists(file_path):
             if is_audio:
