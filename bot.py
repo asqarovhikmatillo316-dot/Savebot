@@ -2,7 +2,7 @@ import asyncio
 import logging
 import sqlite3
 from aiohttp import web
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -19,9 +19,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# --- SOZLAMALAR (TOKEN VA ADMIN ID) ---
+# --- SOZLAMALAR ---
 TOKEN = "8891447881:AAElGLH4neb3Dk9sH9e7I2ji3QUBNEA6_e8"
-CHANNELS = ["-100xxxxxxxxx", "-100xxxxxxxxx"]  # Bu yerga kanallaringiz ID'larini yozasiz
+
+# Kanallar ID'lari (Siz bergan ID'lar)
+CHANNELS = [-4406015595, -3973741534]
+
+# Inline tugmalar uchun kanallar havolasi
+LINK_CHANNEL_1 = "https://t.me/+I55yoIA3bYhmZDBi"
+LINK_CHANNEL_2 = "https://t.me/+8ibfJL_Q_FU5YzEy"
 
 # --- BAZA BILAN ISHLASH (SQLITE) ---
 def init_db():
@@ -60,19 +66,41 @@ async def track_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # --- BOT COMMAND & MESSAGE HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    
     if check_requests(user_id):
         await update.message.reply_text("Xush kelibsiz! Botdan foydalanishingiz mumkin.")
     else:
-        await update.message.reply_text("Botdan foydalanish uchun ko'rsatilgan kanallarga a'zo bo'lish uchun so'rov (join request) yuboring.")
+        keyboard = [
+            [InlineKeyboardButton("➕ 1-Kanalga so'rov yuborish", url=LINK_CHANNEL_1)],
+            [InlineKeyboardButton("➕ 2-Kanalga so'rov yuborish", url=LINK_CHANNEL_2)],
+            [InlineKeyboardButton("✅ Tekshirish", callback_data="check")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            "❌ **Botdan foydalanish uchun quyidagi kanallarga a'zo bo'lish so'rovini (join request) yuboring:**\n\n"
+            "So'rov yuborgach, **Tekshirish** tugmasini yoki qayta /start bosing.",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if not check_requests(user_id):
-        await update.message.reply_text("Siz hali barcha kanallarga so'rov yubormagansiz!")
+        keyboard = [
+            [InlineKeyboardButton("➕ 1-Kanalga so'rov yuborish", url=LINK_CHANNEL_1)],
+            [InlineKeyboardButton("➕ 2-Kanalga so'rov yuborish", url=LINK_CHANNEL_2)]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            "Siz hali barcha kanallarga so'rov yubormagansiz! Kanal havolalariga kirib so'rov yuboring:",
+            reply_markup=reply_markup
+        )
         return
 
     await update.message.reply_text("Video yuklanmoqda, kuting...")
-    # Bu yerda sizning yt-dlp yoki boshqa yuklash kodingiz bo'ladi
+    # Bu yerga yt-dlp yoki boshqa yuklash kodingizni joylashtirasiz
 
 # --- ERROR HANDLER (XATOLIKLARNI USHLASH) ---
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
@@ -94,7 +122,6 @@ async def start_web_server():
 async def main_async():
     init_db()
 
-    # Timeouts sozlamasi (httpx xatolarining oldini olish uchun)
     application = (
         Application.builder()
         .token(TOKEN)
@@ -104,15 +131,15 @@ async def main_async():
         .build()
     )
 
-    # Handlerlarni qo'shish
+    # Handlerlar
     application.add_handler(CommandHandler("start", start))
     application.add_handler(ChatJoinRequestHandler(track_join_request))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Xatoliklar ushlovchisini ulash
+    # Error handler
     application.add_error_handler(error_handler)
 
-    # Web-serverni ishga tushirish (Render uchun)
+    # Render Web serverni ishga tushirish
     asyncio.create_task(start_web_server())
 
     # Botni ishga tushirish
@@ -120,7 +147,6 @@ async def main_async():
         await application.initialize()
         await application.start()
         await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-        # Process to'xtab qolmasligi uchun kutish rejimida ushlab turamiz
         await asyncio.Event().wait()
 
 if __name__ == "__main__":
