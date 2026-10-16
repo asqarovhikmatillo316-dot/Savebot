@@ -14,7 +14,7 @@ from telegram.ext import (
 )
 import yt_dlp
 
-# --- LOGGING SOZLAMALARI ---
+# --- LOGGING ---
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -24,20 +24,21 @@ logger = logging.getLogger(__name__)
 # --- SOZLAMALAR ---
 TOKEN = "8891447881:AAHl-rmeiem-VevnAtVO0MoMQky9yZfufVw"
 BOT_USERNAME = "@Tillosave_bot"
-ADMIN_ID = 5621433060  # Sizning Telegram ID'ingiz (@Asqarov_Hikmatillo)
+ADMIN_ID = 5621433060
 
-# --- BOT COMMAND HANDLERS ---
+# --- START COMMAND ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
-    # 1. Foydalanuvchiga javob qaytarish
+    # Userga javob
     await update.message.reply_text(
         "👋 <b>Xush kelibsiz!</b>\n\n"
-        "Menga <b>Instagram</b> 📸 yoki <b>YouTube</b> 🔴 video havolasini (link) yuboring. Men uni sizga <b>Video (MP4)</b> yoki <b>Audio (MP3)</b> ko'rinishida yuklab beraman! ⚡️🎬🎵",
+        "Menga <b>Instagram</b> 📸 yoki <b>YouTube</b> 🔴 video havolasini yuboring.\n"
+        "Men uni sizga <b>Video (MP4)</b> yoki <b>Audio (MP3)</b> ko'rinishida yuklab beraman! ⚡️",
         parse_mode="HTML"
     )
     
-    # 2. Sizga (Admin'ga) xavfsiz HTML formatida bildirishnoma yuborish
+    # Adminga bildirishnoma
     try:
         user_name = html.escape(user.full_name)
         username = f"@{user.username}" if user.username else "yo'q"
@@ -75,7 +76,7 @@ def download_media(url, output_path, is_audio=False):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
 
-# --- HAVOLA KELGANDA FORMAT TANLASH MENYUSI ---
+# --- HAVOLA KELGANDA ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = update.message.text.strip()
     
@@ -83,7 +84,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Iltimos, to'g'ri video havolasini (link) yuboring. 🔗")
         return
 
-    # Formatni so'rash tugmalari
     keyboard = [
         [
             InlineKeyboardButton("🎬 Video (MP4)", callback_data="fmt_mp4"),
@@ -97,7 +97,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-# --- TUGMA BOSILGANDA YUKLASH HANDLERI ---
+# --- TUGMA BOSILGANDA ---
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -150,7 +150,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
 
 # --- RENDER WEB SERVER ---
 async def handle_ping(request):
-    return web.Response(text="Bot is running and awake!")
+    return web.Response(text="Bot is running!")
 
 async def start_web_server():
     app = web.Application()
@@ -160,7 +160,7 @@ async def start_web_server():
     site = web.TCPSite(runner, '0.0.0.0', 10000)
     await site.start()
 
-# --- ASOSIY ISHGA TUSHIRISH FUNKSIYASI ---
+# --- MAIN ---
 async def main_async():
     application = (
         Application.builder()
