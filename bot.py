@@ -20,8 +20,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- SOZLAMALAR (TOKEN VA ADMIN ID) ---
-TOKEN = "SIZNING_BOT_TOKENINGIZ"  # O'zingizning bot tokeningizni kiriting
-CHANNELS = ["-100xxxxxxxxx", "-100xxxxxxxxx"]  # Kanallaringiz ID'lari
+TOKEN = "8891447881:AAElGLH4neb3Dk9sH9e7I2ji3QUBNEA6_e8"
+CHANNELS = ["-100xxxxxxxxx", "-100xxxxxxxxx"]  # Bu yerga kanallaringiz ID'larini yozasiz
 
 # --- BAZA BILAN ISHLASH (SQLITE) ---
 def init_db():
