@@ -20,8 +20,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- SOZLAMALAR (TOKEN VA ADMIN ID) ---
-TOKEN = "SIZNING_BOT_TOKENINGIZ"  # O'zingizning bot tokeningizni yozing
-CHANNELS = ["-100xxxxxxxxx", "-100xxxxxxxxx"]  # Kanallar ID'lari
+TOKEN = "SIZNING_BOT_TOKENINGIZ"  # O'zingizning bot tokeningizni kiriting
+CHANNELS = ["-100xxxxxxxxx", "-100xxxxxxxxx"]  # Kanallaringiz ID'lari
 
 # --- BAZA BILAN ISHLASH (SQLITE) ---
 def init_db():
@@ -91,7 +91,7 @@ async def start_web_server():
     await site.start()
 
 # --- ASOSIY ISHGA TUSHIRISH FUNKSIYASI ---
-def main():
+async def main_async():
     init_db()
 
     # Timeouts sozlamasi (httpx xatolarining oldini olish uchun)
@@ -113,11 +113,15 @@ def main():
     application.add_error_handler(error_handler)
 
     # Web-serverni ishga tushirish (Render uchun)
-    loop = asyncio.get_event_loop()
-    loop.create_task(start_web_server())
+    asyncio.create_task(start_web_server())
 
     # Botni ishga tushirish
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    async with application:
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+        # Process to'xtab qolmasligi uchun kutish rejimida ushlab turamiz
+        await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main_async())
