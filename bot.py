@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 # --- SOZLAMALAR ---
 TOKEN = "8891447881:AAElGLH4neb3Dk9sH9e7I2ji3QUBNEA6_e8"
+BOT_USERNAME = "@Save_bot"  # O'zingizning botingiz username'ini yozing
 
 # --- BOT COMMAND HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -28,7 +29,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Xush kelibsiz! Menga Instagram yoki YouTube video havolasini yuboring, men uni yuklab beraman."
     )
 
-# --- VIDEO YUKLASH FUNKSIYASI (FONDA ISHLAYDI) ---
+# --- VIDEO YUKLASH FUNKSIYASI ---
 def download_video(url, output_path):
     ydl_opts = {
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
@@ -51,12 +52,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_path = f"video_{update.effective_user.id}_{update.message.message_id}.mp4"
 
     try:
-        # Video yuklashni asosiy oqimni to'sib qo'ymaydigan alohida thread'ga o'tkazamiz
+        # Asosiy oqimni ushlab qolmaslik uchun alohida thread'da yuklaymiz
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, download_video, url, file_path)
 
         if os.path.exists(file_path):
-            await update.message.reply_video(video=open(file_path, 'rb'))
+            # Video ostiga bot havolasini (caption) qo'shib yuboramiz
+            await update.message.reply_video(
+                video=open(file_path, 'rb'),
+                caption=f"🤖 {BOT_USERNAME}"
+            )
             await status_msg.delete()
             os.remove(file_path)
         else:
@@ -72,7 +77,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     logger.error("Botda kutilmagan xatolik yuz berdi:", exc_info=context.error)
 
-# --- RENDER WEB SERVER (BOTNI UXLATMASLIK UCHUN) ---
+# --- RENDER WEB SERVER ---
 async def handle_ping(request):
     return web.Response(text="Bot is running and awake!")
 
