@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import html
 from aiohttp import web
 from telegram import Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -31,20 +32,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # 1. Foydalanuvchiga javob qaytarish
     await update.message.reply_text(
-        "👋 **Xush kelibsiz!**\n\n"
-        "Menga **Instagram** 📸 yoki **YouTube** 🔴 video havolasini (link) yuboring. Men uni sizga **Video (MP4)** yoki **Audio (MP3)** ko'rinishida yuklab beraman! ⚡️🎬🎵",
-        parse_mode="Markdown"
+        "👋 <b>Xush kelibsiz!</b>\n\n"
+        "Menga <b>Instagram</b> 📸 yoki <b>YouTube</b> 🔴 video havolasini (link) yuboring. Men uni sizga <b>Video (MP4)</b> yoki <b>Audio (MP3)</b> ko'rinishida yuklab beraman! ⚡️🎬🎵",
+        parse_mode="HTML"
     )
     
-    # 2. Sizga (Admin'ga) bildirishnoma yuborish
+    # 2. Sizga (Admin'ga) xavfsiz HTML formatida bildirishnoma yuborish
     try:
+        user_name = html.escape(user.full_name)
+        username = f"@{user.username}" if user.username else "yo'q"
         admin_text = (
-            "🚀 **Yangi foydalanuvchi start bosdi!**\n\n"
-            f"👤 **Ismi:** {user.full_name}\n"
-            f"🆔 **ID:** `{user.id}`\n"
-            f"🔗 **Username:** @{user.username if user.username else 'yoq'}"
+            "🚀 <b>Yangi foydalanuvchi start bosdi!</b>\n\n"
+            f"👤 <b>Ismi:</b> {user_name}\n"
+            f"🆔 <b>ID:</b> <code>{user.id}</code>\n"
+            f"🔗 <b>Username:</b> {username}"
         )
-        await context.bot.send_message(chat_id=ADMIN_ID, text=admin_text, parse_mode="Markdown")
+        await context.bot.send_message(chat_id=ADMIN_ID, text=admin_text, parse_mode="HTML")
     except Exception as e:
         logger.error(f"Adminga bildirishnoma yuborishda xatolik: {e}")
 
@@ -91,8 +94,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(
         "Qaysi formatda yuklashni xohlaysiz?",
-        reply_markup=reply_markup,
-        quote=True
+        reply_markup=reply_markup
     )
 
 # --- TUGMA BOSILGANDA YUKLASH HANDLERI ---
@@ -112,7 +114,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         status_text = "⚡️ Video yuklanmoqda, kuting..."
         file_ext = "mp4"
 
-    status_msg = await query.edit_message_text(status_text)
+    await query.edit_message_text(status_text)
     
     file_path = f"media_{query.from_user.id}_{query.message.message_id}.{file_ext}"
 
