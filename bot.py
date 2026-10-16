@@ -26,7 +26,9 @@ BOT_USERNAME = "@Save_bot"  # O'zingizning botingiz username'ini yozing
 # --- BOT COMMAND HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Xush kelibsiz! Menga Instagram yoki YouTube video havolasini yuboring, men uni yuklab beraman."
+        "👋 **Xush kelibsiz!**\n\n"
+        "Menga **Instagram** 📸 yoki **YouTube** 🔴 video havolasini (link) yuboring, men uni sizga tezkor va sifatli yuklab beraman! ⚡️🎬",
+        parse_mode="Markdown"
     )
 
 # --- VIDEO YUKLASH FUNKSIYASI ---
@@ -44,10 +46,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = update.message.text.strip()
     
     if not (url.startswith("http://") or url.startswith("https://")):
-        await update.message.reply_text("Iltimos, to'g'ri video havolasini (link) yuboring.")
+        await update.message.reply_text("Iltimos, to'g'ri video havolasini (link) yuboring. 🔗")
         return
 
-    status_msg = await update.message.reply_text("⚡ Video yuklanmoqda, kuting...")
+    status_msg = await update.message.reply_text("⚡️ Video yuklanmoqda, kuting...")
     
     file_path = f"video_{update.effective_user.id}_{update.message.message_id}.mp4"
 
@@ -65,7 +67,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await status_msg.delete()
             os.remove(file_path)
         else:
-            await status_msg.edit_text("Videoni yuklab bo'lmadi.")
+            await status_msg.edit_text("Videoni yuklab bo'lmadi. ❌")
 
     except Exception as e:
         logger.error(f"Yuklashda xatolik: {e}")
@@ -77,7 +79,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     logger.error("Botda kutilmagan xatolik yuz berdi:", exc_info=context.error)
 
-# --- RENDER WEB SERVER ---
+# --- RENDER WEB SERVER (24/7 ISHLASHI UCHUN) ---
 async def handle_ping(request):
     return web.Response(text="Bot is running and awake!")
 
