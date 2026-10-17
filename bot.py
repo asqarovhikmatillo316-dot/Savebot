@@ -40,12 +40,12 @@ ADMIN_ID = 5621433060
 # Majburiy obuna kanallari
 REQUIRED_CHANNELS = [
     {
-        "id": -3973741534,
+        "id": -1001973741534, # Kanal ID lari to'liq -100 bilan boshlanishi kerak
         "link": "https://t.me/+8ibfJL_Q_FU5YzEy",
         "title": "1-Kanal 📢",
     },
     {
-        "id": -4406015595,
+        "id": -1002440601559,
         "link": "https://t.me/+I55yoIA3bYhmZDBi",
         "title": "2-Kanal 📢",
     },
@@ -67,13 +67,11 @@ async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -
                 chat_id=channel["id"],
                 user_id=user_id,
             )
-            # member, administrator, creator bo'lsa o'tadi
-            if member.status not in ("member", "administrator", "creator"):
+            if member.status in ("left", "kicked"):
                 return False
         except TelegramError as exc:
             logger.warning(f"Obuna tekshirishda ogohlantirish ({channel['title']}): {exc}")
-            # Agar kanal yopiq zayavkali bo'lsa va bot get_chat_member orqali aniqlolmasa,
-            # foydalanuvchida so'rov yuborilganini inobatga olib o'tkazish logikasi:
+            # Bot kanalda admin bo'lmasa yoki ID noto'g'ri bo'lsa xatolik bersa ham foydalanuvchini to'sib qo'ymaslik uchun
             continue
     return True
 
@@ -82,16 +80,16 @@ async def require_subscription(update: Update, context: ContextTypes.DEFAULT_TYP
     if not user:
         return False
 
-    if await check_subscription(user.id, context):
+    is_subscribed = await check_subscription(user.id, context)
+    if is_subscribed:
         return True
 
     text = (
         "⚡️ <b>Xizmatdan foydalanish uchun rasmiy kanallarimizga a'zo bo'ling!</b>\n\n"
-        "<i>Quyidagi tugmalar orqali kanallarga kiring va so'rov yuboring / a'zo bo'ling, so'ngra <b>«Obunani tasdiqlash»</b> tugmasini bosing:</i>"
+        "<i>Quyidagi tugmalar orqali kanallarga kiring va a'zo bo'ling, so'ngra <b>«Obunani tasdiqlash»</b> tugmasini bosing:</i>"
     )
 
     if update.callback_query:
-        await update.callback_query.answer()
         try:
             await update.callback_query.edit_message_text(
                 text,
@@ -117,15 +115,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not await require_subscription(update, context):
-        pass
-    else:
-        await update.effective_message.reply_text(
-            f"👋 <b>Xush kelibsiz, {html.escape(user.first_name)}!</b>\n\n"
-            "🌟 Menga <b>Instagram</b> 📸 yoki <b>YouTube</b> 🔴 video havolasini yuboring.\n\n"
-            "• <b>Instagram:</b> Avtomatik eng yuqori sifatda yuklanadi 🎬\n"
-            "• <b>YouTube:</b> Video sifatini (1080p, 720p, ...) yoki MP3 formatini tanlashingiz mumkin 🎵",
-            parse_mode="HTML",
-        )
+        return
+
+    await update.effective_message.reply_text(
+        f"👋 <b>Xush kelibsiz, {html.escape(user.first_name)}!</b>\n\n"
+        "🌟 Menga <b>Instagram</b> 📸 yoki <b>YouTube</b> 🔴 video havolasini yuboring.\n\n"
+        "• <b>Instagram:</b> Avtomatik eng yuqori sifatda yuklanadi 🎬\n"
+        "• <b>YouTube:</b> Video sifatini (1080p, 720p, 480p, ...) yoki MP3 formatini tanlashingiz mumkin 🎵",
+        parse_mode="HTML",
+    )
 
     try:
         user_name = html.escape(user.full_name or "Noma'lum")
@@ -150,10 +148,12 @@ def download_media(url: str, output_template: str, format_spec: str = "best", is
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
-        "retries": 3,
+        "retries": 5,
+        "fragment_retries": 5,
         "socket_timeout": 30,
         "nocheckcertificate": True,
         "geo_bypass": True,
+        "nocache": True,
         "extractor_args": {
             "youtube": {
                 "player_client": ["ios", "android", "web_creator"],
@@ -216,7 +216,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     domain = parsed.netloc.lower()
 
-    # INSTAGRAM BO'LSA - Oddiy va to'g'ridan-to'g'ri yuklaymiz
+    # INSTAGRAM BO'LSA
     if "instagram.com" in domain:
         status_msg = await update.message.reply_text("⚡️ <i>Instagram video yuklanmoqda, kuting...</i>", parse_mode="HTML")
         
@@ -239,12 +239,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await status_msg.delete()
         except Exception as exc:
             logger.exception(f"Instagram yuklashda xatolik: {exc}")
-            await status_msg.edit_text("❌ <i>Instagram videoni yuklab bo'lmadi. Havolani tekshirib qayta urinib ko'ring.</i>", parse_mode="HTML")
+            await status_msg.edit_text("❌ <i>Instagram videoni yuklab bo'lmadi. Havola to'g'riligini yoki kontent ochiqligini tekshiring.</i>", parse_mode="HTML")
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
         return
 
-    # YOUTUBE BO'LSA - Sifat va MP3 tanlovini ko'rsatamiz
+    # YOUTUBE BO'LSA
     elif "youtube.com" in domain or "youtu.be" in domain:
         context.user_data["pending_url"] = url
 
@@ -271,7 +271,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("ℹ️ <b>Faqat Instagram va YouTube havolalari qo'llab-quvvatlanadi.</b>", parse_mode="HTML")
 
-# --- TUGMALAR (YOUTUBE VA OBUNA UCHUN) ---
+# --- TUGMALAR ---
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if not query:
@@ -294,6 +294,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "❌ Hali kanallarga to'liq a'zo bo'lmadingiz!",
                 show_alert=True,
             )
+            try:
+                await query.edit_message_reply_markup(
+                    reply_markup=subscription_keyboard()
+                )
+            except TelegramError:
+                pass
         return
 
     if not query.data.startswith("yt_"):
@@ -305,24 +311,24 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     url = context.user_data.get("pending_url")
     if not url:
-        await query.answer("Havola muddati o'tgan. Qayta yuboring.", show_alert=True)
+        await query.answer("Havola topilmadi. Qayta yuboring.", show_alert=True)
         return
 
     choice = query.data
     is_audio = (choice == "yt_mp3")
 
-    # Format tanlovi
+    # YouTube format va sifatlarini ishonchli tanlash
     if choice == "yt_1080":
-        fmt = "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080]"
+        fmt = "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080]/best"
         quality_label = "1080p Video"
     elif choice == "yt_720":
-        fmt = "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720]"
+        fmt = "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720]/best"
         quality_label = "720p Video"
     elif choice == "yt_480":
-        fmt = "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480]"
+        fmt = "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480]/best"
         quality_label = "480p Video"
     elif choice == "yt_360":
-        fmt = "bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360]"
+        fmt = "bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360]/best"
         quality_label = "360p Video"
     else:
         fmt = "bestaudio/best"
