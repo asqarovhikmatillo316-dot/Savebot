@@ -3,6 +3,7 @@ import logging
 import os
 import html
 import tempfile
+import shutil
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -32,8 +33,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- SOZLAMALAR ---
-# Render -> Environment bo'limiga BOT_TOKEN nomli variable qo'shing.
-TOKEN = os.getenv("BOT_TOKEN", "").strip()
+TOKEN = "8891447881:AAHl-rmeiem-VevnAtVO0MoMQky9yZfufVw"
 BOT_USERNAME = "@Tillosave_bot"
 ADMIN_ID = 5621433060
 
@@ -54,8 +54,7 @@ REQUIRED_CHANNELS = [
 
 def subscription_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"📢 {channel['title']}ga a'zo bo'lish",
-                              url=channel["link"])]
+        [InlineKeyboardButton(f"📢 {channel['title']}ga a'zo bo'lish", url=channel["link"])]
         for channel in REQUIRED_CHANNELS
     ] + [[InlineKeyboardButton("✅ Obunani tekshirish", callback_data="check_sub")]])
 
@@ -70,7 +69,6 @@ async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -
             )
             if member.status not in ("member", "administrator", "creator"):
                 return False
-            # Restricted foydalanuvchi a'zo bo'lishi mumkin, lekin is_member False bo'lsa rad etamiz.
             if member.status == "restricted" and not getattr(member, "is_member", False):
                 return False
         except TelegramError as exc:
@@ -79,7 +77,6 @@ async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -
                 channel["title"],
                 exc,
             )
-            # Kanal IDsi yoki bot ruxsati noto'g'ri bo'lsa, yuklashga ruxsat bermaymiz.
             return False
     return True
 
@@ -126,9 +123,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user or not update.effective_message:
         return
 
-    # Har bir startda avval obunani tekshiramiz.
     if not await require_subscription(update, context):
-        # Admin bildirishnomasini ham yuboramiz.
         pass
     else:
         await update.effective_message.reply_text(
@@ -156,14 +151,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- YUKLASH ---
 def download_media(url: str, output_template: str, is_audio: bool = False) -> str:
-    """Media yuklaydi. MP3 uchun FFmpeg o'rnatilgan bo'lishi kerak."""
+    """YouTube va Instagram'dan media yuklaydi (IP bloki va format sozlamalari bilan)."""
     ydl_opts = {
         "outtmpl": output_template,
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
-        "retries": 2,
+        "retries": 3,
         "socket_timeout": 30,
+        "nocheckcertificate": True,
+        "geo_bypass": True,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["ios", "android", "web_creator"],
+                "player_skip": ["webpage", "configs"]
+            }
+        },
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
     }
 
     if is_audio:
@@ -188,7 +195,6 @@ def download_media(url: str, output_template: str, is_audio: bool = False) -> st
     if is_audio:
         filename = str(Path(filename).with_suffix(".mp3"))
     elif not Path(filename).exists():
-        # yt-dlp birlashtirganda yakuniy fayl kengaytmasi o'zgarishi mumkin.
         candidate = str(Path(filename).with_suffix(".mp4"))
         if Path(candidate).exists():
             filename = candidate
@@ -215,7 +221,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Foydalanuvchi va chat bo'yicha havolani saqlaymiz.
     context.user_data["pending_url"] = url
     context.user_data["pending_chat_id"] = update.effective_chat.id
 
@@ -272,12 +277,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Tugma boshqa foydalanuvchining xabari ostida bosilmasin.
-    if query.message and query.message.reply_to_message:
-        if query.from_user.id != query.message.reply_to_message.from_user.id:
-            await query.answer("Bu tugma siz uchun emas.", show_alert=True)
-            return
-
     url = context.user_data.get("pending_url")
     if not url:
         await query.answer("Havola topilmadi. Havolani qayta yuboring.", show_alert=True)
@@ -300,7 +299,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             None, download_media, url, output_template, is_audio
         )
 
-        # Telegram bot API orqali juda katta fayllarni yuborib bo'lmasligi mumkin.
         if os.path.getsize(file_path) > 49 * 1024 * 1024:
             await query.message.reply_text(
                 "❌ Fayl hajmi Telegram orqali yuborish uchun juda katta (49 MB dan oshdi)."
@@ -328,16 +326,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as exc:
         logger.exception("Media yuklashda xatolik: %s", exc)
         message = (
-            "❌ Faylni yuklashda xatolik yuz berdi. Havolani tekshirib, qayta urinib ko'ring.\n\n"
-            "MP3 ishlamasa, serverda FFmpeg o'rnatilganini tekshiring."
+            "❌ Faylni yuklashda xatolik yuz berdi. Havolani tekshirib, qayta urinib ko'ring."
         )
         try:
             await query.edit_message_text(message)
         except TelegramError:
             await query.message.reply_text(message)
     finally:
-        # Vaqtinchalik fayllarni, shu jumladan yt-dlp yaratgan qo'shimcha fayllarni tozalash.
-        import shutil
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
@@ -362,11 +357,6 @@ async def start_web_server():
 
 # --- MAIN ---
 async def main_async():
-    if not TOKEN:
-        raise RuntimeError(
-            "BOT_TOKEN topilmadi. Render Environment bo'limiga BOT_TOKEN qo'shing."
-        )
-
     application = (
         Application.builder()
         .token(TOKEN)
