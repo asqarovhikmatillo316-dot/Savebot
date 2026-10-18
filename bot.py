@@ -61,12 +61,10 @@ async def get_unsubscribed_channels(user_id: int, context: ContextTypes.DEFAULT_
                 chat_id=channel["id"],
                 user_id=user_id,
             )
-            # member statuslari: creator, administrator, member bo'lsa a'zo sanaladi
             if member.status in ("left", "kicked"):
                 unsubscribed.append(channel)
         except TelegramError as exc:
             logger.warning(f"Obuna tekshirishda ogohlantirish ({channel['title']}): {exc}")
-            # Agar bot kanalni tekshira olmasa, foydalanuvchini bloklab qo'ymaslik uchun a'zo deb hisoblaymiz
             continue
     return unsubscribed
 
@@ -126,8 +124,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.effective_message.reply_text(
         f"👋 <b>Xush kelibsiz, {html.escape(user.first_name)}!</b>\n\n"
-        "📸 Menga <b>Instagram</b> (Reels, Post, IGTV) havolasini yuboring.\n"
-        "Men uni sizga to'g'ri va eng yuqori sifatda yuklab beraman! ⚡️🎬",
+        "🌟 Menga <b>Instagram</b> 📸 yoki <b>YouTube</b> 🔴 havolasini yuboring.\n\n"
+        "• <b>Instagram:</b> Avtomatik eng yuqori sifatda yuklanadi 🎬\n"
+        "• <b>YouTube:</b> Video sifatini (720p, 480p, ...) yoki MP3 formatini tanlashingiz mumkin 🎵",
         parse_mode="HTML",
     )
 
@@ -147,11 +146,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.warning(f"Adminga bildirishnoma yuborilmadi: {exc}")
 
 
-# --- INSTAGRAM YUKLASH FUNKSIYASI ---
-def download_instagram_video(url: str, output_template: str) -> str:
+# --- MEDIA YUKLASH FUNKSIYASI ---
+def download_media(url: str, output_template: str, format_spec: str = "best", is_audio: bool = False) -> str:
     ydl_opts = {
         "outtmpl": output_template,
-        "format": "best[ext=mp4]/best",
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
@@ -161,25 +159,46 @@ def download_instagram_video(url: str, output_template: str) -> str:
         "nocheckcertificate": True,
         "geo_bypass": True,
         "cachedir": False,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["ios", "android", "web_creator"],
+                "player_skip": ["webpage", "configs"]
+            }
+        },
         "http_headers": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Sec-Fetch-Mode": "navigate",
+            "Accept-Language": "en-US,en;q=0.9",
         },
     }
+
+    if is_audio:
+        ydl_opts.update({
+            "format": "bestaudio/best",
+            "postprocessors": [{
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192",
+            }],
+        })
+    else:
+        ydl_opts.update({
+            "format": format_spec,
+            "merge_output_format": "mp4",
+        })
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         filename = ydl.prepare_filename(info)
 
-    if not Path(filename).exists():
+    if is_audio:
+        filename = str(Path(filename).with_suffix(".mp3"))
+    elif not Path(filename).exists():
         candidate = str(Path(filename).with_suffix(".mp4"))
         if Path(candidate).exists():
             filename = candidate
 
     if not Path(filename).exists():
-        raise FileNotFoundError("Yuklangan video topilmadi.")
+        raise FileNotFoundError("Yuklangan fayl topilmadi.")
     return filename
 
 
@@ -196,67 +215,94 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         await update.message.reply_text(
-            "❌ <b>Iltimos, to'g'ri Instagram havolasini yuboring.</b> 🔗",
+            "❌ <b>Iltimos, to'g'ri Instagram yoki YouTube havolasini yuboring.</b> 🔗",
             parse_mode="HTML",
         )
         return
 
     domain = parsed.netloc.lower()
 
-    if "instagram.com" not in domain:
-        await update.message.reply_text(
-            "ℹ️ <b>Ushbu bot faqat Instagram videolarini yuklaydi.</b>\n"
-            "Iltimos, Instagram Reels yoki Post havolasini yuboring.",
-            parse_mode="HTML",
+    # INSTAGRAM BO'LSA
+    if "instagram.com" in domain:
+        status_msg = await update.message.reply_text(
+            "⚡️ <i>Instagram video yuklanmoqda, kuting...</i>", parse_mode="HTML"
         )
+
+        temp_dir = tempfile.mkdtemp(prefix="insta_")
+        output_template = str(Path(temp_dir) / "download.%(ext)s")
+
+        try:
+            loop = asyncio.get_running_loop()
+            file_path = await loop.run_in_executor(
+                None, download_media, url, output_template, "best[ext=mp4]/best", False
+            )
+
+            if os.path.getsize(file_path) > 49 * 1024 * 1024:
+                await status_msg.edit_text(
+                    "❌ <b>Fayl hajmi Telegram chekovidan (49 MB) oshib ketdi.</b>",
+                    parse_mode="HTML",
+                )
+                return
+
+            with open(file_path, "rb") as video_file:
+                await update.message.reply_video(
+                    video=video_file,
+                    caption=f"🎬 <b>Yuklab olindi:</b> {BOT_USERNAME}",
+                    parse_mode="HTML",
+                    supports_streaming=True,
+                )
+            await status_msg.delete()
+
+        except Exception as exc:
+            logger.exception(f"Instagram yuklashda xatolik: {exc}")
+            await status_msg.edit_text(
+                "❌ <b>Instagram videoni yuklab bo'lmadi.</b>\n"
+                "<i>Havola to'g'riligini va sahifa ochiqligini (Public) tekshiring.</i>",
+                parse_mode="HTML",
+            )
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
         return
 
-    status_msg = await update.message.reply_text(
-        "⚡️ <i>Instagram video yuklanmoqda, kuting...</i>", parse_mode="HTML"
-    )
+    # YOUTUBE BO'LSA
+    elif "youtube.com" in domain or "youtu.be" in domain:
+        context.user_data["pending_url"] = url
 
-    temp_dir = tempfile.mkdtemp(prefix="insta_")
-    output_template = str(Path(temp_dir) / "download.%(ext)s")
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("🎥 720p HD", callback_data="yt_720"),
+                InlineKeyboardButton("📹 480p", callback_data="yt_480"),
+            ],
+            [
+                InlineKeyboardButton("📹 360p", callback_data="yt_360"),
+                InlineKeyboardButton("📹 240p", callback_data="yt_240"),
+                InlineKeyboardButton("📹 144p", callback_data="yt_144"),
+            ],
+            [
+                InlineKeyboardButton("🎵 MP3 Audio", callback_data="yt_mp3")
+            ]
+        ])
 
-    try:
-        loop = asyncio.get_running_loop()
-        file_path = await loop.run_in_executor(
-            None, download_instagram_video, url, output_template
+        await update.message.reply_text(
+            "🔴 <b>YouTube videoni qaysi sifatda yuklamoqchisiz?</b>\n\n"
+            "<i>Sifat yoki audio formatini tanlang:</i>",
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+    else:
+        await update.message.reply_text(
+            "ℹ️ <b>Faqat Instagram va YouTube havolalari qo'llab-quvvatlanadi.</b>",
+            parse_mode="HTML"
         )
 
-        if os.path.getsize(file_path) > 49 * 1024 * 1024:
-            await status_msg.edit_text(
-                "❌ <b>Fayl hajmi Telegram chekovidan (49 MB) oshib ketdi.</b>",
-                parse_mode="HTML",
-            )
-            return
 
-        with open(file_path, "rb") as video_file:
-            await update.message.reply_video(
-                video=video_file,
-                caption=f"🎬 <b>Yuklab olindi:</b> {BOT_USERNAME}",
-                parse_mode="HTML",
-                supports_streaming=True,
-            )
-        await status_msg.delete()
-
-    except Exception as exc:
-        logger.exception(f"Instagram yuklashda xatolik: {exc}")
-        await status_msg.edit_text(
-            "❌ <b>Instagram videoni yuklab bo'lmadi.</b>\n"
-            "<i>Havola to'g'riligini va sahifa ochiqligini (Public) tekshiring.</i>",
-            parse_mode="HTML",
-        )
-    finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-
-
-# --- CALLBACK QUERY (OBUNA TEKSHIRISH) ---
+# --- CALLBACK QUERY (OBUNA VA YOUTUBE TUGMALARI) ---
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if not query:
         return
 
+    # Obuna tekshiruvi
     if query.data == "check_sub":
         unsubscribed = await get_unsubscribed_channels(query.from_user.id, context)
 
@@ -265,7 +311,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 await query.edit_message_text(
                     "🎉 <b>Obuna muvaffaqiyatli tasdiqlandi!</b>\n\n"
-                    "<i>Endi Instagram havolasini yuborishingiz mumkin.</i>",
+                    "<i>Endi Instagram yoki YouTube havolasini yuborishingiz mumkin.</i>",
                     parse_mode="HTML",
                 )
             except TelegramError:
@@ -275,7 +321,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "❌ Hali barcha kanallarga a'zo bo'lmadingiz!",
                 show_alert=True,
             )
-            # Faqat qolgan (a'zo bo'linmagan) kanallarni tugmalarga chiqarib yangilaymiz
             text = (
                 "⚡️ <b>Deyarli tayyor! Qolgan kanal(lar)ga ham a'zo bo'ling:</b>\n\n"
                 "<i>Quyidagi kanalga kirib a'zo bo'ling, so'ngra qayta <b>«Obunani tasdiqlash»</b> tugmasini bosing:</i>"
@@ -288,6 +333,91 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             except TelegramError:
                 pass
+        return
+
+    # YouTube tugmalari
+    if not query.data.startswith("yt_"):
+        return
+
+    if not await require_subscription(update, context):
+        await query.answer("Avval kanallarga a'zo bo'ling.", show_alert=True)
+        return
+
+    url = context.user_data.get("pending_url")
+    if not url:
+        await query.answer("Havola topilmadi. Qayta yuboring.", show_alert=True)
+        return
+
+    choice = query.data
+    is_audio = (choice == "yt_mp3")
+
+    if choice == "yt_720":
+        fmt = "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720]/best"
+        quality_label = "720p Video"
+    elif choice == "yt_480":
+        fmt = "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480]/best"
+        quality_label = "480p Video"
+    elif choice == "yt_360":
+        fmt = "bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360]/best"
+        quality_label = "360p Video"
+    elif choice == "yt_240":
+        fmt = "bestvideo[height<=240][ext=mp4]+bestaudio[ext=m4a]/best[height<=240]/best"
+        quality_label = "240p Video"
+    elif choice == "yt_144":
+        fmt = "bestvideo[height<=144][ext=mp4]+bestaudio[ext=m4a]/best[height<=144]/best"
+        quality_label = "144p Video"
+    else:
+        fmt = "bestaudio/best"
+        quality_label = "MP3 Audio"
+
+    await query.answer()
+    await query.edit_message_text(f"⚡️ <b>{quality_label} yuklanmoqda, biroz kuting...</b>", parse_mode="HTML")
+
+    temp_dir = tempfile.mkdtemp(prefix="yt_")
+    output_template = str(Path(temp_dir) / "download.%(ext)s")
+
+    try:
+        loop = asyncio.get_running_loop()
+        file_path = await loop.run_in_executor(
+            None, download_media, url, output_template, fmt, is_audio
+        )
+
+        if os.path.getsize(file_path) > 49 * 1024 * 1024:
+            await query.message.reply_text(
+                "❌ <b>Fayl hajmi Telegram chekovidan (49 MB) oshib ketdi. Nisbatan pastroq sifatni tanlang.</b>",
+                parse_mode="HTML"
+            )
+            return
+
+        with open(file_path, "rb") as media_file:
+            if is_audio:
+                await query.message.reply_audio(
+                    audio=media_file,
+                    caption=f"🎵 <b>Yuklab olindi:</b> {BOT_USERNAME}",
+                    parse_mode="HTML"
+                )
+            else:
+                await query.message.reply_video(
+                    video=media_file,
+                    caption=f"🎬 <b>Sifat:</b> {quality_label}\n🤖 <b>Manba:</b> {BOT_USERNAME}",
+                    parse_mode="HTML",
+                    supports_streaming=True,
+                )
+
+        try:
+            await query.delete_message()
+        except TelegramError:
+            pass
+
+    except Exception as exc:
+        logger.exception(f"YouTube yuklashda xatolik: {exc}")
+        message = "❌ <b>Ushbu sifatdagi videoni yuklab bo'lmadi. Boshqa sifatni tanlab ko'ring.</b>"
+        try:
+            await query.edit_message_text(message, parse_mode="HTML")
+        except TelegramError:
+            await query.message.reply_text(message, parse_mode="HTML")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 # --- ERROR HANDLER ---
