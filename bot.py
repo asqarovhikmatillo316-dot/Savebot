@@ -153,34 +153,35 @@ def download_media(url: str, output_template: str, format_spec: str = "best", is
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
-        "retries": 10,
-        "fragment_retries": 10,
-        "socket_timeout": 30,
+        "retries": 5,
+        "fragment_retries": 5,
+        "socket_timeout": 20,
         "nocheckcertificate": True,
         "geo_bypass": True,
         "cachedir": False,
         "extractor_args": {
             "youtube": {
-                "player_client": ["ios", "android", "web_creator"],
+                "player_client": ["android", "ios", "mweb"],
                 "player_skip": ["webpage", "configs"]
             }
         },
         "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
         },
     }
 
     if is_audio:
         ydl_opts.update({
-            "format": "bestaudio/best",
+            "format": "ba/ba*",
             "postprocessors": [{
                 "key": "FFmpegExtractAudio",
                 "preferredcodec": "mp3",
-                "preferredquality": "192",
+                "preferredquality": "128",
             }],
         })
     else:
+        # Tayyor mp4 yoki eng mos keladigan eng yengil formatni tanlaydi (yuklash vaqti tezlashadi)
         ydl_opts.update({
             "format": format_spec,
             "merge_output_format": "mp4",
@@ -191,11 +192,14 @@ def download_media(url: str, output_template: str, format_spec: str = "best", is
         filename = ydl.prepare_filename(info)
 
     if is_audio:
-        filename = str(Path(filename).with_suffix(".mp3"))
-    elif not Path(filename).exists():
+        candidate_mp3 = str(Path(filename).with_suffix(".mp3"))
+        if Path(candidate_mp3).exists():
+            return candidate_mp3
+
+    if not Path(filename).exists():
         candidate = str(Path(filename).with_suffix(".mp4"))
         if Path(candidate).exists():
-            filename = candidate
+            return candidate
 
     if not Path(filename).exists():
         raise FileNotFoundError("Yuklangan fayl topilmadi.")
@@ -296,7 +300,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-# --- CALLBACK QUERY (OBUNA VA YOUTUBE TUGMALARI) ---
+# --- CALLBACK QUERY ---
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if not query:
@@ -335,7 +339,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
         return
 
-    # YouTube tugmalari
     if not query.data.startswith("yt_"):
         return
 
@@ -351,23 +354,24 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     choice = query.data
     is_audio = (choice == "yt_mp3")
 
+    # Format tanlovlari ancha moslashtirildi va tezzlashtirildi
     if choice == "yt_720":
-        fmt = "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720]/best"
+        fmt = "b[height<=720]/bv*[height<=720]+ba/b"
         quality_label = "720p Video"
     elif choice == "yt_480":
-        fmt = "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480]/best"
+        fmt = "b[height<=480]/bv*[height<=480]+ba/b"
         quality_label = "480p Video"
     elif choice == "yt_360":
-        fmt = "bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360]/best"
+        fmt = "b[height<=360]/bv*[height<=360]+ba/b"
         quality_label = "360p Video"
     elif choice == "yt_240":
-        fmt = "bestvideo[height<=240][ext=mp4]+bestaudio[ext=m4a]/best[height<=240]/best"
+        fmt = "b[height<=240]/bv*[height<=240]+ba/b"
         quality_label = "240p Video"
     elif choice == "yt_144":
-        fmt = "bestvideo[height<=144][ext=mp4]+bestaudio[ext=m4a]/best[height<=144]/best"
+        fmt = "b[height<=144]/bv*[height<=144]+ba/b"
         quality_label = "144p Video"
     else:
-        fmt = "bestaudio/best"
+        fmt = "ba/b"
         quality_label = "MP3 Audio"
 
     await query.answer()
