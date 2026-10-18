@@ -52,29 +52,33 @@ REQUIRED_CHANNELS = [
 ]
 
 
-def subscription_keyboard():
-    buttons = [
-        [InlineKeyboardButton(text=f"✨ {channel['title']} ga ulanish", url=channel["link"])]
-        for channel in REQUIRED_CHANNELS
-    ]
-    buttons.append([InlineKeyboardButton(text="🔄 Obunani tasdiqlash", callback_data="check_sub")])
-    return InlineKeyboardMarkup(buttons)
-
-
-async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Foydalanuvchi majburiy kanallarga a'zo ekanini tekshiradi."""
+async def get_unsubscribed_channels(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> list:
+    """Foydalanuvchi a'zo bo'lmagan kanallar ro'yxatini qaytaradi."""
+    unsubscribed = []
     for channel in REQUIRED_CHANNELS:
         try:
             member = await context.bot.get_chat_member(
                 chat_id=channel["id"],
                 user_id=user_id,
             )
+            # member statuslari: creator, administrator, member bo'lsa a'zo sanaladi
             if member.status in ("left", "kicked"):
-                return False
+                unsubscribed.append(channel)
         except TelegramError as exc:
             logger.warning(f"Obuna tekshirishda ogohlantirish ({channel['title']}): {exc}")
+            # Agar bot kanalni tekshira olmasa, foydalanuvchini bloklab qo'ymaslik uchun a'zo deb hisoblaymiz
             continue
-    return True
+    return unsubscribed
+
+
+def build_subscription_keyboard(unsubscribed_channels: list) -> InlineKeyboardMarkup:
+    """Faqat a'zo bo'linmagan kanallar va tekshirish tugmasini yaratadi."""
+    buttons = [
+        [InlineKeyboardButton(text=f"✨ {channel['title']} ga ulanish", url=channel["link"])]
+        for channel in unsubscribed_channels
+    ]
+    buttons.append([InlineKeyboardButton(text="🔄 Obunani tasdiqlash", callback_data="check_sub")])
+    return InlineKeyboardMarkup(buttons)
 
 
 async def require_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -82,12 +86,13 @@ async def require_subscription(update: Update, context: ContextTypes.DEFAULT_TYP
     if not user:
         return False
 
-    if await check_subscription(user.id, context):
+    unsubscribed = await get_unsubscribed_channels(user.id, context)
+    if not unsubscribed:
         return True
 
     text = (
-        "⚡️ <b>Botdan foydalanish uchun rasmiy kanallarimizga a'zo bo'ling!</b>\n\n"
-        "<i>Quyidagi tugmalar orqali kanallarga kiring va a'zo bo'ling, so'ngra <b>«Obunani tasdiqlash»</b> tugmasini bosing:</i>"
+        "⚡️ <b>Botdan foydalanish uchun quyidagi kanal(lar)ga a'zo bo'ling:</b>\n\n"
+        "<i>Kanalga kirib a'zo bo'ling, so'ngra <b>«Obunani tasdiqlash»</b> tugmasini bosing:</i>"
     )
 
     if update.callback_query:
@@ -95,17 +100,17 @@ async def require_subscription(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.callback_query.edit_message_text(
                 text,
                 parse_mode="HTML",
-                reply_markup=subscription_keyboard(),
+                reply_markup=build_subscription_keyboard(unsubscribed),
             )
         except TelegramError:
             await update.callback_query.message.reply_text(
-                text, parse_mode="HTML", reply_markup=subscription_keyboard()
+                text, parse_mode="HTML", reply_markup=build_subscription_keyboard(unsubscribed)
             )
     elif update.effective_message:
         await update.effective_message.reply_text(
             text,
             parse_mode="HTML",
-            reply_markup=subscription_keyboard(),
+            reply_markup=build_subscription_keyboard(unsubscribed),
         )
     return False
 
@@ -142,7 +147,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.warning(f"Adminga bildirishnoma yuborilmadi: {exc}")
 
 
-# --- INSTAGRAM YUKLASH FUNKSIYASI (BLOKNI AYLANIB O'TISH) ---
+# --- INSTAGRAM YUKLASH FUNKSIYASI ---
 def download_instagram_video(url: str, output_template: str) -> str:
     ydl_opts = {
         "outtmpl": output_template,
@@ -253,8 +258,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if query.data == "check_sub":
-        if await check_subscription(query.from_user.id, context):
-            await query.answer("✅ Obuna tasdiqlandi!", show_alert=True)
+        unsubscribed = await get_unsubscribed_channels(query.from_user.id, context)
+
+        if not unsubscribed:
+            await query.answer("✅ Barcha kanallarga a'zosiz!", show_alert=True)
             try:
                 await query.edit_message_text(
                     "🎉 <b>Obuna muvaffaqiyatli tasdiqlandi!</b>\n\n"
@@ -265,12 +272,19 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
         else:
             await query.answer(
-                "❌ Hali ikkala kanalga ham to'liq a'zo bo'lmadingiz!",
+                "❌ Hali barcha kanallarga a'zo bo'lmadingiz!",
                 show_alert=True,
             )
+            # Faqat qolgan (a'zo bo'linmagan) kanallarni tugmalarga chiqarib yangilaymiz
+            text = (
+                "⚡️ <b>Deyarli tayyor! Qolgan kanal(lar)ga ham a'zo bo'ling:</b>\n\n"
+                "<i>Quyidagi kanalga kirib a'zo bo'ling, so'ngra qayta <b>«Obunani tasdiqlash»</b> tugmasini bosing:</i>"
+            )
             try:
-                await query.edit_message_reply_markup(
-                    reply_markup=subscription_keyboard()
+                await query.edit_message_text(
+                    text,
+                    parse_mode="HTML",
+                    reply_markup=build_subscription_keyboard(unsubscribed),
                 )
             except TelegramError:
                 pass
