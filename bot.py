@@ -32,7 +32,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# --- SOZLAMALAR (XAVFSIZ) ---
+# --- SOZLAMALAR ---
 TOKEN = os.getenv("BOT_TOKEN", "8891447881:AAGK544Dd5-qmdJhXRHpnrIuLxKF1NXGmPA").strip()
 ADMIN_ID = int(os.getenv("ADMIN_ID", "5621433060"))
 BOT_USERNAME = "@Tillosave_bot"
@@ -126,7 +126,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML",
     )
 
-    # Admin bildirishi
     try:
         user_name = html.escape(user.full_name or "Noma'lum")
         username = f"@{user.username}" if user.username else "yo'q"
@@ -143,7 +142,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.warning(f"Adminga bildirishnoma yuborilmadi: {exc}")
 
 
-# --- INSTAGRAM YUKLASH FUNKSIYASI ---
+# --- INSTAGRAM YUKLASH FUNKSIYASI (BLOKNI AYLANIB O'TISH) ---
 def download_instagram_video(url: str, output_template: str) -> str:
     ydl_opts = {
         "outtmpl": output_template,
@@ -151,14 +150,17 @@ def download_instagram_video(url: str, output_template: str) -> str:
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
-        "retries": 5,
+        "retries": 10,
+        "fragment_retries": 10,
         "socket_timeout": 30,
         "nocheckcertificate": True,
         "geo_bypass": True,
-        "nocache": True,
+        "cachedir": False,
         "http_headers": {
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
-            "Accept-Language": "en-US,en;q=0.9",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Sec-Fetch-Mode": "navigate",
         },
     }
 
