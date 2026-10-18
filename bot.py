@@ -37,7 +37,7 @@ TOKEN = os.getenv("BOT_TOKEN", "8891447881:AAGK544Dd5-qmdJhXRHpnrIuLxKF1NXGmPA")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "5621433060"))
 BOT_USERNAME = "@Tillosave_bot"
 
-# Majburiy obuna kanallari
+# Majburiy obuna kanallari (ID-lar to'liq -100 bilan boshlanishi shart)
 REQUIRED_CHANNELS = [
     {
         "id": -1001973741534,
@@ -146,34 +146,34 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.warning(f"Adminga bildirishnoma yuborilmadi: {exc}")
 
 
-# --- MEDIA YUKLASH FUNKSIYASI ---
+# --- MEDIA YUKLASH FUNKSIYASI (YOUTUBE BLOKLARINI YENGISH) ---
 def download_media(url: str, output_template: str, format_spec: str = "best", is_audio: bool = False) -> str:
     ydl_opts = {
         "outtmpl": output_template,
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
-        "retries": 5,
-        "fragment_retries": 5,
-        "socket_timeout": 20,
+        "retries": 10,
+        "fragment_retries": 10,
+        "socket_timeout": 30,
         "nocheckcertificate": True,
         "geo_bypass": True,
         "cachedir": False,
         "extractor_args": {
             "youtube": {
-                "player_client": ["android", "ios", "mweb"],
-                "player_skip": ["webpage", "configs"]
+                "player_client": ["tv", "mweb", "android"],
+                "player_skip": ["configs", "webpage"]
             }
         },
         "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
         },
     }
 
     if is_audio:
         ydl_opts.update({
-            "format": "ba/ba*",
+            "format": "bestaudio/best",
             "postprocessors": [{
                 "key": "FFmpegExtractAudio",
                 "preferredcodec": "mp3",
@@ -181,7 +181,6 @@ def download_media(url: str, output_template: str, format_spec: str = "best", is
             }],
         })
     else:
-        # Tayyor mp4 yoki eng mos keladigan eng yengil formatni tanlaydi (yuklash vaqti tezlashadi)
         ydl_opts.update({
             "format": format_spec,
             "merge_output_format": "mp4",
@@ -354,7 +353,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     choice = query.data
     is_audio = (choice == "yt_mp3")
 
-    # Format tanlovlari ancha moslashtirildi va tezzlashtirildi
     if choice == "yt_720":
         fmt = "b[height<=720]/bv*[height<=720]+ba/b"
         quality_label = "720p Video"
