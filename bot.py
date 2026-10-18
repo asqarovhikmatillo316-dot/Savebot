@@ -40,7 +40,7 @@ ADMIN_ID = 5621433060
 # Majburiy obuna kanallari
 REQUIRED_CHANNELS = [
     {
-        "id": -1001973741534, # Kanal ID lari to'liq -100 bilan boshlanishi kerak
+        "id": -1001973741534,
         "link": "https://t.me/+8ibfJL_Q_FU5YzEy",
         "title": "1-Kanal 📢",
     },
@@ -71,7 +71,6 @@ async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -
                 return False
         except TelegramError as exc:
             logger.warning(f"Obuna tekshirishda ogohlantirish ({channel['title']}): {exc}")
-            # Bot kanalda admin bo'lmasa yoki ID noto'g'ri bo'lsa xatolik bersa ham foydalanuvchini to'sib qo'ymaslik uchun
             continue
     return True
 
@@ -142,7 +141,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- YUKLASH FUNKSIYASI ---
 def download_media(url: str, output_template: str, format_spec: str = "best", is_audio: bool = False) -> str:
-    """Media faylni yuklab beradi."""
     ydl_opts = {
         "outtmpl": output_template,
         "quiet": True,
@@ -216,7 +214,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     domain = parsed.netloc.lower()
 
-    # INSTAGRAM BO'LSA
+    # INSTAGRAM BO'LSA - Tugmasiz, to'g'ridan-to'g'ri yuklaydi
     if "instagram.com" in domain:
         status_msg = await update.message.reply_text("⚡️ <i>Instagram video yuklanmoqda, kuting...</i>", parse_mode="HTML")
         
@@ -239,12 +237,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await status_msg.delete()
         except Exception as exc:
             logger.exception(f"Instagram yuklashda xatolik: {exc}")
-            await status_msg.edit_text("❌ <i>Instagram videoni yuklab bo'lmadi. Havola to'g'riligini yoki kontent ochiqligini tekshiring.</i>", parse_mode="HTML")
+            await status_msg.edit_text("❌ <i>Instagram videoni yuklab bo'lmadi. Havolani tekshirib qayta urinib ko'ring.</i>", parse_mode="HTML")
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
         return
 
-    # YOUTUBE BO'LSA
+    # YOUTUBE BO'LSA - Sifat tanlovlari va MP3 tugmasi chiqadi
     elif "youtube.com" in domain or "youtu.be" in domain:
         context.user_data["pending_url"] = url
 
@@ -317,7 +315,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     choice = query.data
     is_audio = (choice == "yt_mp3")
 
-    # YouTube format va sifatlarini ishonchli tanlash
     if choice == "yt_1080":
         fmt = "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080]/best"
         quality_label = "1080p Video"
