@@ -36,8 +36,9 @@ logger = logging.getLogger(__name__)
 TOKEN = os.getenv("BOT_TOKEN", "8891447881:AAGK544Dd5-qmdJhXRHpnrIuLxKF1NXGmPA").strip()
 ADMIN_ID = int(os.getenv("ADMIN_ID", "5621433060"))
 BOT_USERNAME = "@Tillosave_bot"
+COOKIES_TEXT = os.getenv("YOUTUBE_COOKIES", "").strip()
 
-# Majburiy obuna kanallari (ID-lar to'liq -100 bilan boshlanishi shart)
+# Majburiy obuna kanallari
 REQUIRED_CHANNELS = [
     {
         "id": -1001973741534,
@@ -53,7 +54,6 @@ REQUIRED_CHANNELS = [
 
 
 async def get_unsubscribed_channels(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> list:
-    """Foydalanuvchi a'zo bo'lmagan kanallar ro'yxatini qaytaradi."""
     unsubscribed = []
     for channel in REQUIRED_CHANNELS:
         try:
@@ -70,7 +70,6 @@ async def get_unsubscribed_channels(user_id: int, context: ContextTypes.DEFAULT_
 
 
 def build_subscription_keyboard(unsubscribed_channels: list) -> InlineKeyboardMarkup:
-    """Faqat a'zo bo'linmagan kanallar va tekshirish tugmasini yaratadi."""
     buttons = [
         [InlineKeyboardButton(text=f"✨ {channel['title']} ga ulanish", url=channel["link"])]
         for channel in unsubscribed_channels
@@ -113,7 +112,7 @@ async def require_subscription(update: Update, context: ContextTypes.DEFAULT_TYP
     return False
 
 
-# --- START HANDLER ---
+# --- START ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if not user or not update.effective_message:
@@ -146,8 +145,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.warning(f"Adminga bildirishnoma yuborilmadi: {exc}")
 
 
-# --- MEDIA YUKLASH FUNKSIYASI (YOUTUBE BLOKLARINI YENGISH) ---
-def download_media(url: str, output_template: str, format_spec: str = "best", is_audio: bool = False) -> str:
+# --- MEDIA YUKLASH FUNKSIYASI ---
+def download_media(url: str, output_template: str, format_spec: str = "best", is_audio: bool = False, cookies_path: str = None) -> str:
     ydl_opts = {
         "outtmpl": output_template,
         "quiet": True,
@@ -161,15 +160,18 @@ def download_media(url: str, output_template: str, format_spec: str = "best", is
         "cachedir": False,
         "extractor_args": {
             "youtube": {
-                "player_client": ["tv", "mweb", "android"],
-                "player_skip": ["configs", "webpage"]
+                "player_client": ["android_creator", "ios", "web"],
+                "player_skip": ["configs"]
             }
         },
         "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
         },
     }
+
+    if cookies_path and Path(cookies_path).exists():
+        ydl_opts["cookiefile"] = cookies_path
 
     if is_audio:
         ydl_opts.update({
@@ -237,7 +239,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             loop = asyncio.get_running_loop()
             file_path = await loop.run_in_executor(
-                None, download_media, url, output_template, "best[ext=mp4]/best", False
+                None, download_media, url, output_template, "best[ext=mp4]/best", False, None
             )
 
             if os.path.getsize(file_path) > 49 * 1024 * 1024:
@@ -305,7 +307,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not query:
         return
 
-    # Obuna tekshiruvi
     if query.data == "check_sub":
         unsubscribed = await get_unsubscribed_channels(query.from_user.id, context)
 
@@ -377,11 +378,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     temp_dir = tempfile.mkdtemp(prefix="yt_")
     output_template = str(Path(temp_dir) / "download.%(ext)s")
+    
+    cookies_path = None
+    if COOKIES_TEXT:
+        cookies_path = str(Path(temp_dir) / "cookies.txt")
+        with open(cookies_path, "w", encoding="utf-8") as f:
+            f.write(COOKIES_TEXT)
 
     try:
         loop = asyncio.get_running_loop()
         file_path = await loop.run_in_executor(
-            None, download_media, url, output_template, fmt, is_audio
+            None, download_media, url, output_template, fmt, is_audio, cookies_path
         )
 
         if os.path.getsize(file_path) > 49 * 1024 * 1024:
@@ -441,7 +448,7 @@ async def start_web_server():
     await site.start()
 
 
-# --- ASOSIY ISHGA TUSHIRISH ---
+# --- MAIN ---
 async def main_async():
     if not TOKEN:
         raise RuntimeError("BOT_TOKEN topilmadi!")
