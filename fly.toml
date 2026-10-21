@@ -1,1 +1,27 @@
+app = "tillosave-bot" # Xohlagan noyob ismingizni yozishingiz mumkin
+primary_region = "fra" # Frankfurt (O'zbekistonga eng yaqin va tezkor server)
 
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 8080
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [[services.http_checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "5s"
+    method = "get"
+    path = "/"
