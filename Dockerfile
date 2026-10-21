@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Tizimga ffmpeg va kerakli paketlarni o'rnatamiz
+# ffmpeg va tizim paketlarini o'rnatamiz
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     ca-certificates \
@@ -8,11 +8,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Kutubxonalarni o'rnatamiz
+# Python kutubxonalarini o'rnatamiz
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Loyiha kodini ko'chiramiz
+# Loyiha fayllarini ko'chiramiz
 COPY . .
 
 CMD ["python", "bot.py"]
