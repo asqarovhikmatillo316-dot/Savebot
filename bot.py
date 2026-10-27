@@ -148,6 +148,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- MEDIA YUKLASH FUNKSIYASI ---
 def download_media(url: str, output_template: str, format_spec: str = "best", is_audio: bool = False, cookies_path: str = None) -> str:
     ydl_opts = {
+        "format": format_spec,
         "outtmpl": output_template,
         "quiet": True,
         "no_warnings": True,
@@ -170,7 +171,10 @@ def download_media(url: str, output_template: str, format_spec: str = "best", is
         },
     }
 
-    if cookies_path and Path(cookies_path).exists():
+    # Əgar GitHub'ga yuklangan youtube_cookies.txt fayli mavjud bo'lsa, shundan o'qiydi
+    if Path("youtube_cookies.txt").exists():
+        ydl_opts["cookiefile"] = "youtube_cookies.txt"
+    elif cookies_path and Path(cookies_path).exists():
         ydl_opts["cookiefile"] = cookies_path
 
     if is_audio:
@@ -476,7 +480,7 @@ async def main_async():
         ])
         await application.start()
         await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-        await asyncio.Event().wait()
+        asyncio.Event().wait()
 
 
 if __name__ == "__main__":
