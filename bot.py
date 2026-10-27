@@ -171,7 +171,6 @@ def download_media(url: str, output_template: str, format_spec: str = "best", is
         },
     }
 
-    # Əgar GitHub'ga yuklangan youtube_cookies.txt fayli mavjud bo'lsa, shundan o'qiydi
     if Path("youtube_cookies.txt").exists():
         ydl_opts["cookiefile"] = "youtube_cookies.txt"
     elif cookies_path and Path(cookies_path).exists():
@@ -480,7 +479,10 @@ async def main_async():
         ])
         await application.start()
         await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-        asyncio.Event().wait()
+        
+        # To'g'rilangan event kutish qismi:
+        stop_event = asyncio.Event()
+        await stop_event.wait()
 
 
 if __name__ == "__main__":
